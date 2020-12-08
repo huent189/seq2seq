@@ -44,6 +44,7 @@ class MultiheadAttention(nn.Module):
         self.Q_Linear = nn.Linear(d_model, d_model)
         self.K_Linear = nn.Linear(d_model, d_model)
         self.V_Linear = nn.Linear(d_model, d_model)
+        self.final_linear = nn.Linear(d_model, d_model)
         self.num_head = num_head
     def forward(self, Q, K, V):
         q_projected = self.Q_Linear(Q)
@@ -51,23 +52,25 @@ class MultiheadAttention(nn.Module):
         v_projected = self.V_Linear(V)
         b, vc, d_model = q_projected.shape
         hid_dim = d_model // self.num_head
-        q_projected = q_projected.reshape([b, self.num_head, vc, hid_dim])
-        k_projected = k_projected.reshape([b, self.num_head, vc, hid_dim])
-        v_projected = v_projected.reshape([b, self.num_head, vc, hid_dim])
+        q_projected = q_projected.reshape([b, vc, self.num_head,hid_dim])
+        k_projected = k_projected.reshape([b, vc, self.num_head, hid_dim])
+        v_projected = v_projected.reshape([b, vc, self.num_head, hid_dim])
         # attention
-        atten = torch.einsum('bhqd,bhkd->bhqk', q_projected, k_projected)
+        atten = torch.einsum('bqhd,bkhd->bhqk', q_projected, k_projected)
         d_k = q_projected.shape[-1]
         atten /= np.sqrt(d_k)
-        atten = F.softmax(atten, d_k)
-        atten = torch.einsum('bhqk,bhvd')
-    def attention(self, Q, K, V):
-        d_k = K.shape[-1]
-        output = torch.matmul(Q, K.T)
-        output /= np.sqrt(d_k)
-        return torch.matmul(F.softmax(output, d_k),V)
+        atten = F.softmax(atten, 3)
+        print(atten.shape, v_projected.shape)
+        atten = torch.einsum('bhqd,bdhv->bqhv', atten, v_projected)
+        #concatenate
+        atten = atten.reshape([b, vc, d_model])
+        atten = self.final_linear(atten)
+        return atten
 
 if __name__ == "__main__":
-    test = Embedding(3,2)
-    x = torch.LongTensor([0,1,2])
-    y = test(x)
-    print(y)
+    test = MultiheadAttention(8, 2)
+    q = torch.rand([3,16,8])
+    k = torch.rand([3,16,8])
+    v = torch.rand([3,16,8])
+    out = test(q,k,v)
+    print(out.shape)
