@@ -5,17 +5,16 @@ import torch.nn.functional as F
 
 
 class PositionalEmbedding(nn.Module):
-    def __init__(self, d_model, seq_len):
+    def __init__(self, d_model):
         super(PositionalEmbedding, self).__init__()
         self.d_model = d_model
-        self.seq_len = seq_len
 
-    def forward(self):
-        pos = torch.arange(0, self.seq_len).unsqueeze(1).float()
+    def forward(self, x):
+        pos = torch.arange(0, x.shape[1]).unsqueeze(1).float()
         dividend = 1 / torch.pow(10000, (torch.arange(0, self.d_model, 2) / self.d_model)).float()
-        print(dividend)
-        PE = torch.zeros([self.seq_len, self.d_model])
-        print(pos * dividend)
+        # print(dividend)
+        PE = torch.zeros([len(x), self.d_model])
+        # print(pos * dividend)
         PE[:, 0::2] = torch.sin(pos * dividend)
         PE[:, 1::2] = torch.cos(pos * dividend)
         return PE
@@ -134,18 +133,20 @@ class Transformer(nn.Module):
         """
         super(Transformer, self).__init__()
         self.embbeder = Embedding(vocab_size, d_model)
-        pos_encoder = PositionalEmbedding(d_model, d_model)
-        self.encoded_pos = pos_encoder().unsqueeze(0)
+        self.pos_encoder = PositionalEmbedding(d_model)
+        
         self.encoder = Encoder(d_model)
         self.decoder = Decoder(d_model)
 
     def forward(self, x, y):
+        print('inout shape', x.shape, y.shape)
         embed_x = self.embbeder(x)
-        print(embed_x.shape)
-        print(embed_x.shape, self.encoded_pos.shape)
-        x = embed_x + self.encoded_pos
+        x_pos = self.pos_encoder(x).unsqueeze(0)
+        print('embbeding shape', embed_x.shape, x_pos.shape)
+        x = embed_x + x_pos
         x = self.encoder(x)
-        y = self.embbeder(y) + self.encoded_pos
+        y_pos = self.pos_encoder(y).unsqueeze(0)
+        y = self.embbeder(y) + y_pos
         y = self.decoder(y, x)
         return F.softmax(y)
 if __name__ == "__main__":
