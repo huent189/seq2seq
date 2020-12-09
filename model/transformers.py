@@ -15,14 +15,13 @@ class PositionalEmbedding(nn.Module):
         dividend = 1 / torch.pow(10000, (torch.arange(0, self.d_model, 2) / self.d_model)).float()
         print(dividend)
         PE = torch.zeros([self.seq_len, self.d_model])
-        PE.requires_grad = False
         print(pos * dividend)
         PE[:, 0::2] = torch.sin(pos * dividend)
         PE[:, 1::2] = torch.cos(pos * dividend)
         return PE
+
+
 # both source target embedding and output decoding
-
-
 class Embedding(nn.Module):
     def __init__(self, vocab_size, d_model):
         super(Embedding, self).__init__()
@@ -136,15 +135,15 @@ class Transformer(nn.Module):
         super(Transformer, self).__init__()
         self.embbeder = Embedding(vocab_size, d_model)
         pos_encoder = PositionalEmbedding(d_model, d_model)
-        self.encoded_pos = pos_encoder()
+        self.encoded_pos = pos_encoder().unsqueeze(0)
         self.encoder = Encoder(d_model)
         self.decoder = Decoder(d_model)
 
     def forward(self, x, y):
         embed_x = self.embbeder(x)
         print(embed_x.shape)
+        print(embed_x.shape, self.encoded_pos.shape)
         x = embed_x + self.encoded_pos
-        print(x.shape)
         x = self.encoder(x)
         y = self.embbeder(y) + self.encoded_pos
         y = self.decoder(y, x)
