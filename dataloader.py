@@ -2,11 +2,11 @@ import torchtext
 from pyvi import ViTokenizer
 import os
 import dill
+import torch
 def tokenize(text):
     text = ViTokenizer.tokenize(text)
     return text.split()
 def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_path=None, reload=None):
-    text = torchtext.data.Field(sequential=True, tokenize=tokenize, lower=True)
     VI = torchtext.data.Field(tokenize=tokenize, 
             init_token='<sos>', 
             eos_token='<eos>', 
@@ -37,25 +37,22 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
                             sort_within_batch=False,
                             shuffle=True # we pass repeat=False because we want to wrap this Iterator layer.
                             )
-    if reload:
-        with open(os.path.join(reload,"VI.Field"),"rb")as f:
-            VI = dill.load(f)
-        with open(os.path.join(reload,"EN.Field"),"rb")as f:
-            EN = dill.load(f)
+    if reload is not None:
+        VI = torch.load(os.path.join(reload,"VI.Field"))
+        EN = torch.load(os.path.join(reload,"EN.Field"))
     else:
+        print('build vocab')
         VI.build_vocab(train_data)
         EN.build_vocab(train_data)
     if save_path:
-        with open(os.path.join(save_path,"VI.Field"),"wb")as f:
-            dill.dump(VI, f)
-        with open(os.path.join(save_path,"EN.Field"),"wb")as f:
-            dill.dump(EN, f)
+        torch.save(VI, os.path.join(save_path,"VI.Field"))
+        torch.save(EN, os.path.join(save_path,"EN.Field"))
     if split:
         return train_iter, val_iter, EN, VI 
     else:
         return train_iter, EN, VI  
 if __name__ == "__main__":
-    train, val, en, vi = get_dataloader('/home/dell/Documents/thesis/transformer/data', split=True, reload='/home/dell/Documents/thesis/transformer/snapshot')
+    train, val, en, vi = get_dataloader('/home/dell/Documents/thesis/transformer/data', split=True, device=-1)
     for i, batch in enumerate(train):
         print(batch)
         break
