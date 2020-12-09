@@ -3,7 +3,7 @@ from pyvi import ViTokenizer
 import os
 import dill
 import torch
-
+from torchtext.data.utils import get_tokenizer
 
 def tokenize(text):
     text = ViTokenizer.tokenize(text)
@@ -16,7 +16,7 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
                               eos_token='<eos>',
                               lower=True,
                               fix_length=200)
-    EN = torchtext.data.Field(tokenize=tokenize,
+    EN = torchtext.data.Field(tokenize=get_tokenizer('spacy', language='en'),
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,
