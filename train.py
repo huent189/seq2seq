@@ -6,12 +6,16 @@ from tqdm import tqdm
 from dataloader import get_dataloader
 from torch.utils.tensorboard import SummaryWriter
 from torchtext.data.metrics import bleu_score
+from util import seed_all
+seed_all(2000)
+
+
 def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
         torch.nn.init.xavier_uniform_(m.weight.data)
 
 
-def train_one_epoch(model, data, optimizer, criterion, clip, device):
+def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
     model.train()
     epoch_loss = 0
     epoch_bleu = 0
@@ -22,12 +26,14 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device):
         trg = trg.to(device)
         src = src.permute(1, 0)
         trg = trg.permute(1, 0)
-        trg_input = trg[:, :-1]
+        trg_input = torch.zeros_like(trg).to(device)
+        trg_input[:, :-1] = trg[:, 1:]
+        trg_input[:, -1] = pad_idx
         optimizer.zero_grad()
         output = model(src, trg_input)
 
-        # output = output[1:].view(-1, output.shape[-1])
-        # trg = trg[1:].view(-1)
+        output = output[:, 1:].view(-1, output.shape[-1])
+        trg = trg[:, 1:].view(-1)
         loss = criterion(output, trg)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
@@ -35,6 +41,7 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device):
         epoch_loss += loss.item()
         epoch_bleu += bleu_score(output, trg)
     return epoch_loss / len(data)
+
 
 def evaluate(model, data, criterion, device):
     model.eval()
@@ -60,7 +67,8 @@ def train(config):
     else:
         device = 'cpu'
     writer = SummaryWriter(log_dir=config.log_dir)
-    train_data, val_data, en, vi = get_dataloader(config.data_dir, split=True, batch_size=config.batch_size, device=device)
+    train_data, val_data, en, vi = get_dataloader(
+        config.data_dir, split=True, batch_size=config.batch_size, device=device)
     pad_idx = vi.vocab.stoi[vi.pad_token]
     model = Transformer(len(en.vocab.stoi))
     model = model.to(device)
@@ -72,11 +80,14 @@ def train(config):
     optimizer = torch.optim.Adam(model.parameters(), betas=[
                                  0.9, 0.98], lr=config.lr)
     for i in range(config.num_epochs):
-        train_loss = train_one_epoch(model, train_data, optimizer, criterion, config.grad_clip_norm, device)
+        train_loss = train_one_epoch(
+            model, train_data, optimizer, criterion, config.grad_clip_norm, device, pad_idx)
         print(train_loss)
         writer.add_scalar('train', train_loss)
         val_loss = evaluate(model, val_data, criterion, device)
         writer.add_scalar('val loss', train_loss)
+
+
     # write log
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
