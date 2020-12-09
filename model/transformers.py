@@ -62,7 +62,6 @@ class MultiheadAttention(nn.Module):
         v_projected = v_projected.reshape(
             [v_projected.shape[0], v_projected.shape[1], self.num_head, hid_dim])
         # attention
-        print('einsum0', q_projected.shape, k_projected.shape)
         atten = torch.einsum('bqhd,bkhd->bhqk', q_projected, k_projected)
         d_k = q_projected.shape[-1]
         atten /= np.sqrt(d_k)
@@ -70,9 +69,7 @@ class MultiheadAttention(nn.Module):
             mask = torch.triu(torch.ones(
                 atten.shape, dtype=torch.bool), diagonal=1)
             atten[mask] = -1e10
-        print('softmax')
         atten = F.softmax(atten, dim=3)
-        print('einsum', atten.shape, v_projected.shape)
         atten = torch.einsum('bhqd,bdhv->bqhv', atten, v_projected)
         # concatenate
         atten = atten.reshape([b, seq_len, d_model])
@@ -121,7 +118,6 @@ class Decoder(nn.Module):
         """
         y = self.norm1(self.masked_attention(tg, tg, tg) + tg)
         y = self.norm2(self.attention(encoded_input, encoded_input, tg) + y)
-        print(y.shape)
         return self.norm3(self.ffn(y) + y)
 
 
@@ -131,22 +127,21 @@ class Transformer(nn.Module):
         docstring
         """
         super(Transformer, self).__init__()
-        self.embbeder = Embedding(vocab_size, d_model)
+        self.output_embeder = Embedding(vocab_size, d_model)
         self.pos_encoder = PositionalEmbedding(d_model, device)
-
+        self.embbeder = nn.Embedding(vocab_size, d_model)
         self.encoder = Encoder(d_model)
         self.decoder = Decoder(d_model)
 
     def forward(self, x, y):
-        print('inout shape', x.shape, y.shape)
         embed_x = self.embbeder(x)
         x_pos = self.pos_encoder(x).unsqueeze(0)
-        print(embed_x.device, x_pos.device)
         x = embed_x + x_pos
         x = self.encoder(x)
         y_pos = self.pos_encoder(y).unsqueeze(0)
-        y = self.embbeder(y) + y_pos
+        y = self.output_embeder(y) + y_pos
         y = self.decoder(y, x)
+        y = self.output_embeder(y, decode=True)
         return F.softmax(y)
 
 
