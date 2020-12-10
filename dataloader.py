@@ -30,7 +30,7 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
     data_fields = [('en', EN), ('vi', VI)]
     if split:
         train_data, val_data = torchtext.data.TabularDataset.splits(path=root_path, train='train.csv',
-                                                                    validation='val.csv', format='csv', fields=data_fields, skip_header=False)
+                                                                    validation='val.csv', format='csv', fields=data_fields, skip_header=True)
         train_iter, val_iter = torchtext.data.BucketIterator.splits(
             # we pass in the datasets we want the iterator to draw data from
             (train_data, val_data),
