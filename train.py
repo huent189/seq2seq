@@ -60,7 +60,7 @@ def evaluate(model, data, criterion, device, trg_init_idx):
             # trg_input[:, 0] = trg_init_idx
             output = model(src, trg[:,:-1])  # turn off teacher forcing
             output = output.reshape(-1, output.shape[-1])
-            trg = trg[1:].reshape(-1)
+            trg = torch.reshape(trg[:, 1:], [-1])
             loss = criterion(output, trg)
             epoch_loss += loss.item()
     return epoch_loss / len(data)
