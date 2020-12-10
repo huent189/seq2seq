@@ -58,7 +58,7 @@ def evaluate(model, data, criterion, device, trg_init_idx):
             # trg_input = torch.zeros_like(trg).to(device)
             # trg_input[:, 1:] = trg[:, 0:-1]
             # trg_input[:, 0] = trg_init_idx
-            output = model(src, trg)  # turn off teacher forcing
+            output = model(src, trg[:,:-1])  # turn off teacher forcing
             output = output.reshape(-1, output.shape[-1])
             trg = trg[1:].reshape(-1)
             loss = criterion(output, trg)
