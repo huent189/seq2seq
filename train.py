@@ -13,7 +13,7 @@ def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
         torch.nn.init.xavier_uniform_(m.weight.data)
 
-def train_one_iter(model, data, optimizer, criterion, clip, device, pad_idx, en, vi):
+def train_one_iter(model, data, optimizer, criterion, clip, device, pad_idx):
     # model.train()
     # epoch_loss = 0
     # global count
@@ -87,7 +87,7 @@ def train(config):
         epoch_loss = 0
         for i, batch in tqdm(enumerate(train_data)):
             train_loss = train_one_iter(
-                model, batch, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx, en, vi)
+                model, batch, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx)
             epoch_loss += train_loss
             count += 1
             if count % config.snapshot_iter == 0:
@@ -101,6 +101,7 @@ def train(config):
             if count % (config.snapshot_iter // 10):
                 writer.add_scalar('train', epoch_loss / (config.snapshot_iter // 10), i)
                 epoch_loss = 0
+                translate_sentence(batch.en[0], en, vi, model, device)
 
 
 if __name__ == "__main__":
