@@ -98,8 +98,8 @@ def train(config):
                 if val_loss < best_loss:
                     torch.save(model.state_dict(), os.path.join(
                         config.snapshots_folder, "best.pth"))
-            if count % (config.snapshot_iter // 10):
-                writer.add_scalar('train', epoch_loss / (config.snapshot_iter // 10), i)
+            if count % (config.snapshot_iter // 10) == 0:
+                writer.add_scalar('train', epoch_loss / (config.snapshot_iter // 10), count)
                 epoch_loss = 0
                 translate_sentence(batch.en[0], en, vi, model, device)
 
