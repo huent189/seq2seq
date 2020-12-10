@@ -25,13 +25,12 @@ def train_one_iter(model, data, optimizer, criterion, clip, device, trg_init_idx
     trg = data.vi
     src = src.to(device)
     trg = trg.to(device)
-    trg_input = torch.zeros_like(trg).to(device)
-    trg_input[:, 1:] = trg[:, 0:-1]
-    trg_input[:, 0] = trg_init_idx
+    # trg_input = torch.zeros_like(trg).to(device)
+            # trg_input[:, 1:] = trg[:, 0:-1]
+            # trg_input[:, 0] = trg_init_idx
     optimizer.zero_grad()
-    output = model(src, trg_input)
-
-    output = torch.reshape(output, [-1, output.shape[-1]])
+    output = model(src, trg)  # turn off teacher forcing
+    output = output.reshape(-1, output.shape[-1])
     trg = torch.reshape(trg, [-1])
     loss = criterion(output, trg)
     loss.backward()
@@ -56,11 +55,11 @@ def evaluate(model, data, criterion, device, trg_init_idx):
             trg = batch.vi
             src = src.to(device)
             trg = trg.to(device)
-            trg_input = torch.zeros_like(trg).to(device)
-            trg_input[:, 1:] = trg[:, 0:-1]
-            trg_input[:, 0] = trg_init_idx
-            output = model(src, trg_input)  # turn off teacher forcing
-            output = output[1:].reshape(-1, output.shape[-1])
+            # trg_input = torch.zeros_like(trg).to(device)
+            # trg_input[:, 1:] = trg[:, 0:-1]
+            # trg_input[:, 0] = trg_init_idx
+            output = model(src, trg)  # turn off teacher forcing
+            output = output.reshape(-1, output.shape[-1])
             trg = trg[1:].reshape(-1)
             loss = criterion(output, trg)
             epoch_loss += loss.item()
