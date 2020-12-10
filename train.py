@@ -64,7 +64,7 @@ def train(config):
     else:
         device = 'cpu'
     train_data, val_data, en, vi = get_dataloader(
-        config.data_dir, split=True, batch_size=config.batch_size, device=device)
+        config.data_dir, batch_size=config.batch_size, device=device)
     src_pad_idx = en.vocab.stoi[en.pad_token]
     trg_pad_idx = vi.vocab.stoi[vi.pad_token]
     model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)), src_pad_idx, trg_pad_idx)
