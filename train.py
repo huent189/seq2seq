@@ -5,6 +5,7 @@ from model.transformers import Transformer
 from tqdm import tqdm
 from dataloader import get_dataloader
 from torch.utils.tensorboard import SummaryWriter
+from optimizer import NoamOpt
 # from torchtext.data.metrics import bleu_score
 from util import seed_all
 def initialize_weights(m):
@@ -19,12 +20,9 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
         src = batch.en
         trg = batch.vi
         src = src.to(device)
-        trg = trg.to(device)
-        trg_input = torch.zeros_like(trg).to(device)
-        trg_input[:, :-1] = trg[:, 1:]
-        trg_input[:, -1] = pad_idx
+        trg = trg.to(device)    
         optimizer.zero_grad()
-        output = model(src, trg_input)
+        output = model(src, trg)
 
         output = torch.reshape(output, [-1, output.shape[-1]])
         trg = torch.reshape(trg, [-1])
@@ -75,13 +73,13 @@ def train(config):
     print('Model parameter: ', count_parameters(model))
     if config.pretrain_model != "":
         model.load_state_dict(torch.load(config.pretrain_model))
-    criterion = torch.nn.CrossEntropyLoss(ignore_index=pad_idx)
+    criterion = torch.nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
     # todo warm up cool down lr
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    optimizer = NoamOpt(512, 1, 2000, torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
     best_loss = 100
     for i in range(config.num_epochs):
         train_loss = train_one_epoch(
-            model, train_data, optimizer, criterion, config.grad_clip_norm, device, pad_idx)
+            model, train_data, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx)
         print(train_loss)
         writer.add_scalar('train', train_loss, i)
         val_loss = evaluate(model, val_data, criterion, device)
