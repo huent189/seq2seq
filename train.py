@@ -35,7 +35,7 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
         trg = torch.reshape(trg, [-1])
         loss = criterion(output, trg)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
         epoch_loss += loss.item()
         if i % 100 == 0:
@@ -59,6 +59,8 @@ def evaluate(model, data, criterion, device):
             epoch_loss += loss.item()
     return epoch_loss / len(data)
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def train(config):
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
@@ -72,6 +74,7 @@ def train(config):
     model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)))
     model = model.to(device)
     model.apply(initialize_weights)
+    print('Model parameter: ', count_parameters(model))
     if config.pretrain_model != "":
         model.load_state_dict(torch.load(config.pretrain_model))
     criterion = torch.nn.CrossEntropyLoss(ignore_index=pad_idx)
