@@ -13,31 +13,32 @@ def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
         torch.nn.init.xavier_uniform_(m.weight.data)
 
-def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx, en, vi):
-    model.train()
-    epoch_loss = 0
-    global count
-    for i, batch in tqdm(enumerate(data)):
-        src = batch.en
-        trg = batch.vi
-        src = src.to(device)
-        trg = trg.to(device)    
-        optimizer.zero_grad()
-        output = model(src, trg)
+def train_one_iter(model, data, optimizer, criterion, clip, device, pad_idx, en, vi):
+    # model.train()
+    # epoch_loss = 0
+    # global count
+    # for i, batch in tqdm(enumerate(data)):
+    src = data.en
+    trg = data.vi
+    src = src.to(device)
+    trg = trg.to(device)    
+    optimizer.zero_grad()
+    output = model(src, trg)
 
-        output = torch.reshape(output, [-1, output.shape[-1]])
-        trg = torch.reshape(trg, [-1])
-        loss = criterion(output, trg)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-        optimizer.step()
-        epoch_loss += loss.item()
-        count = count + 1
-        if count % 100 == 0:
-            writer.add_scalar('train_per_iter', loss.item(), count // 100)
-            translate_sentence(src[0], en, vi, model, device)
+    output = torch.reshape(output, [-1, output.shape[-1]])
+    trg = torch.reshape(trg, [-1])
+    loss = criterion(output, trg)
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+    optimizer.step()
+        # epoch_loss += loss.item()
+        # count = count + 1
+        # if count % 100 == 0:
+        #     writer.add_scalar('train_per_iter', loss.item(), count // 100)
+        #     translate_sentence(src[0], en, vi, model, device)
         
-    return epoch_loss / len(data)
+    # return epoch_loss / len(data)
+    return loss.item()
 
 
 def evaluate(model, data, criterion, device):
@@ -80,19 +81,26 @@ def train(config):
     # todo warm up cool down lr
     optimizer = NoamOpt(512, 0.1, 2000, torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
     best_loss = 100
+    count = 0
     for i in range(config.num_epochs):
-        train_loss = train_one_epoch(
-            model, train_data, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx, en, vi)
-        print(train_loss)
-        writer.add_scalar('train', train_loss, i)
-        val_loss = evaluate(model, val_data, criterion, device)
-        writer.add_scalar('val loss', val_loss, i)
-        if val_loss < best_loss:
-            torch.save(model.state_dict(), os.path.join(
-                config.snapshots_folder, "best.pth"))
-        if (i + 1) % config.snapshot_iter == 0:
-            torch.save(model.state_dict(), os.path.join(
-                config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
+        model.train()
+        epoch_loss = 0
+        for i, batch in tqdm(enumerate(train_data)):
+            train_loss = train_one_iter(
+                model, batch, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx, en, vi)
+            epoch_loss += train_loss
+            count += 1
+            if count % config.snapshot_iter == 0:
+                torch.save(model.state_dict(), os.path.join(
+                    config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
+                val_loss = evaluate(model, val_data, criterion, device)
+                writer.add_scalar('val loss', val_loss, i)
+                if val_loss < best_loss:
+                    torch.save(model.state_dict(), os.path.join(
+                        config.snapshots_folder, "best.pth"))
+            if count % (config.snapshot_iter // 10):
+                writer.add_scalar('train', epoch_loss / (config.snapshot_iter // 10), i)
+                epoch_loss = 0
 
 
 if __name__ == "__main__":
@@ -113,5 +121,4 @@ if __name__ == "__main__":
     config = parser.parse_args()
     writer = SummaryWriter(log_dir=config.log_dir)
     seed_all(2345)
-    count = 0
     train(config)
