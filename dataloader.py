@@ -10,8 +10,9 @@ def vi_tokenize(text):
     return text.split()
 
 def en_tokenize(text):
-    text = html.unescape(text)
-    return get_tokenizer('spacy')(text)
+    # text = html.unescape(text)
+    # return get_tokenizer('spacy')(text)
+    return text.split()
 
 def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_path=None, reload=None):
     VI = torchtext.data.Field(tokenize=vi_tokenize,
