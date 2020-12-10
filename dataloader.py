@@ -1,7 +1,7 @@
 import torchtext
 from pyvi import ViTokenizer
 import os
-import dill
+# import dill
 import torch
 from torchtext.data.utils import get_tokenizer
 
@@ -67,8 +67,5 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
 
 
 if __name__ == "__main__":
-    train, val, en, vi = get_dataloader(
-        '/home/dell/Documents/thesis/transformer/data', split=True, device=-1)
-    for i, batch in enumerate(train):
-        print(batch)
-        break
+    str = "Headlines that look like this when they have to do with climate change , and headlines that look like this when they have to do with air quality or smog ."
+    print(get_tokenizer('spacy')(str))

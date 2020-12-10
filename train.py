@@ -7,17 +7,14 @@ from dataloader import get_dataloader
 from torch.utils.tensorboard import SummaryWriter
 # from torchtext.data.metrics import bleu_score
 from util import seed_all
-seed_all(2000)
-
-
 def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
         torch.nn.init.xavier_uniform_(m.weight.data)
 
-
 def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
     model.train()
     epoch_loss = 0
+    global count
     for i, batch in tqdm(enumerate(data)):
         src = batch.en
         trg = batch.vi
@@ -35,11 +32,13 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
         trg = torch.reshape(trg, [-1])
         loss = criterion(output, trg)
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
         epoch_loss += loss.item()
-        if i % 100 == 0:
-            writer.add_scalar('train_per_iter', loss.item(), i)
+        count = count + 1
+        if count % 100 == 0:
+            writer.add_scalar('train_per_iter', loss.item(), count // 100)
+        
     return epoch_loss / len(data)
 
 
@@ -71,7 +70,7 @@ def train(config):
     train_data, val_data, en, vi = get_dataloader(
         config.data_dir, split=True, batch_size=config.batch_size, device=device)
     pad_idx = vi.vocab.stoi[vi.pad_token]
-    model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)))
+    model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)), en.vocab.stoi[en.pad_token])
     model = model.to(device)
     model.apply(initialize_weights)
     print('Model parameter: ', count_parameters(model))
@@ -79,8 +78,7 @@ def train(config):
         model.load_state_dict(torch.load(config.pretrain_model))
     criterion = torch.nn.CrossEntropyLoss(ignore_index=pad_idx)
     # todo warm up cool down lr
-    optimizer = torch.optim.Adam(model.parameters(), betas=[
-                                 0.9, 0.98], lr=config.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
     best_loss = 100
     for i in range(config.num_epochs):
         train_loss = train_one_epoch(
@@ -92,7 +90,7 @@ def train(config):
         if val_loss < best_loss:
             torch.save(model.state_dict(), os.path.join(
                 config.snapshots_folder, "best.pth"))
-        if (i + 1)  % config.snapshot_iter == 0:
+        if (i + 1) % config.snapshot_iter == 0:
             torch.save(model.state_dict(), os.path.join(
                 config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
 
@@ -114,4 +112,6 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, default='0')
     config = parser.parse_args()
     writer = SummaryWriter(log_dir=config.log_dir)
+    seed_all(6868)
+    count = 0
     train(config)
