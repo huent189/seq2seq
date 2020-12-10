@@ -144,7 +144,7 @@ class Transformer(nn.Module):
     def make_masks(self, src, trg):
         src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
         trg_pad_msk = (trg != self.trg_pad_idx).unsqueeze(1).unsqueeze(3)
-        trg_mask = torch.tril(torch.ones((trg.shape[1], trg.shape[1]), dtype=torch.bool), diagonal=-1).to(self.device)
+        trg_mask = torch.tril(torch.ones((trg.shape[1], trg.shape[1]), dtype=torch.bool)).to(self.device)
         trg_mask = trg_mask & trg_pad_msk
         return src_mask, trg_mask
         
