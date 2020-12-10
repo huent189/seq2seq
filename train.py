@@ -8,11 +8,12 @@ from torch.utils.tensorboard import SummaryWriter
 from optimizer import NoamOpt
 # from torchtext.data.metrics import bleu_score
 from util import seed_all
+from test import translate_sentence
 def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
         torch.nn.init.xavier_uniform_(m.weight.data)
 
-def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
+def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx, en, vi):
     model.train()
     epoch_loss = 0
     global count
@@ -34,6 +35,7 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
         count = count + 1
         if count % 100 == 0:
             writer.add_scalar('train_per_iter', loss.item(), count // 100)
+            translate_sentence(src[0], en, vi, model, device)
         
     return epoch_loss / len(data)
 
@@ -67,6 +69,7 @@ def train(config):
         config.data_dir, batch_size=config.batch_size, device=device)
     src_pad_idx = en.vocab.stoi[en.pad_token]
     trg_pad_idx = vi.vocab.stoi[vi.pad_token]
+    print('vocab size: en:', len(en.vocab.stoi), 'vi:', len(vi.vocab.stoi))
     model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)), src_pad_idx, trg_pad_idx)
     model = model.to(device)
     model.apply(initialize_weights)
@@ -79,7 +82,7 @@ def train(config):
     best_loss = 100
     for i in range(config.num_epochs):
         train_loss = train_one_epoch(
-            model, train_data, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx)
+            model, train_data, optimizer, criterion, config.grad_clip_norm, device, trg_pad_idx, en, vi)
         print(train_loss)
         writer.add_scalar('train', train_loss, i)
         val_loss = evaluate(model, val_data, criterion, device)

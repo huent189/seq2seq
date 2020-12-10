@@ -67,7 +67,7 @@ class MultiheadAttention(nn.Module):
         d_k = q_projected.shape[-1]
         atten /= np.sqrt(d_k)
         if mask is not None:
-            atten.masked_fill(mask == 0, -1e10)
+            atten = atten.masked_fill(mask == 0, -1e10)
         atten = F.softmax(atten, dim=3)
         atten = self.qk_droupout(atten)
         atten = torch.matmul(atten, v_projected)
