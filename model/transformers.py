@@ -163,7 +163,8 @@ class Transformer(nn.Module):
         for layer in self.decoder:
             y = layer(y, x, src_mask, trg_mask)
         y = self.output_token_embedding(y, decode=True)
-        return F.softmax(y)
+        # return F.softmax(y)
+        return y
 
 if __name__ == "__main__":
     test = Transformer(16, 1, 1, device='cpu')

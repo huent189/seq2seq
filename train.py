@@ -75,7 +75,7 @@ def train(config):
         model.load_state_dict(torch.load(config.pretrain_model))
     criterion = torch.nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
     # todo warm up cool down lr
-    optimizer = NoamOpt(512, 1, 2000, torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+    optimizer = NoamOpt(512, 0.1, 2000, torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
     best_loss = 100
     for i in range(config.num_epochs):
         train_loss = train_one_epoch(
@@ -109,6 +109,6 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, default='0')
     config = parser.parse_args()
     writer = SummaryWriter(log_dir=config.log_dir)
-    seed_all(6868)
+    seed_all(2345)
     count = 0
     train(config)

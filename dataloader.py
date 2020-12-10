@@ -4,20 +4,23 @@ import os
 # import dill
 import torch
 from torchtext.data.utils import get_tokenizer
-
-def tokenize(text):
+import html
+def vi_tokenize(text):
     text = ViTokenizer.tokenize(text)
     return text.split()
 
+def en_tokenize(text):
+    text = html.unescape(text)
+    return get_tokenizer('spacy')(text)
 
 def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_path=None, reload=None):
-    VI = torchtext.data.Field(tokenize=tokenize,
+    VI = torchtext.data.Field(tokenize=vi_tokenize,
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,
                               fix_length=200,
                               batch_first=True)
-    EN = torchtext.data.Field(tokenize=get_tokenizer('spacy'),
+    EN = torchtext.data.Field(tokenize=en_tokenize,
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,
@@ -69,5 +72,7 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
 
 
 if __name__ == "__main__":
-    str = "Headlines that look like this when they have to do with climate change , and headlines that look like this when they have to do with air quality or smog ."
-    print(get_tokenizer('spacy')(str))
+    str = "It &apos;s a big community . It &apos;s such a big community"
+    unescaped = html.unescape(str)
+    print(unescaped)
+    print(get_tokenizer('spacy')(unescaped))
