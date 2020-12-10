@@ -16,7 +16,7 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
                               eos_token='<eos>',
                               lower=True,
                               fix_length=200)
-    EN = torchtext.data.Field(tokenize=get_tokenizer('spacy', language='en'),
+    EN = torchtext.data.Field(tokenize=get_tokenizer('spacy'),
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,

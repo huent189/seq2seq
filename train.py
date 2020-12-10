@@ -18,7 +18,6 @@ def initialize_weights(m):
 def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
     model.train()
     epoch_loss = 0
-    # epoch_bleu = 0
     for i, batch in tqdm(enumerate(data)):
         src = batch.en
         trg = batch.vi
@@ -39,7 +38,8 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
         epoch_loss += loss.item()
-        # epoch_bleu += bleu_score(output, trg)
+        if i % 100 == 0:
+            writer.add_scalar('train_per_iter', loss.item(), i)
     return epoch_loss / len(data)
 
 
@@ -66,7 +66,6 @@ def train(config):
         device = 'cuda'
     else:
         device = 'cpu'
-    writer = SummaryWriter(log_dir=config.log_dir)
     train_data, val_data, en, vi = get_dataloader(
         config.data_dir, split=True, batch_size=config.batch_size, device=device)
     pad_idx = vi.vocab.stoi[vi.pad_token]
@@ -90,7 +89,7 @@ def train(config):
         if val_loss < best_loss:
             torch.save(model.state_dict(), os.path.join(
                 config.snapshots_folder, "best.pth"))
-        if (i + 1) % config.snapshot_iter == 0:
+        if (i + 1)  % config.snapshot_iter == 0:
             torch.save(model.state_dict(), os.path.join(
                 config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
 
@@ -111,4 +110,5 @@ if __name__ == "__main__":
     parser.add_argument('--pretrain_model', type=str, default="")
     parser.add_argument('--gpu_id', type=str, default='0')
     config = parser.parse_args()
+    writer = SummaryWriter(log_dir=config.log_dir)
     train(config)
