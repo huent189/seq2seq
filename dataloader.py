@@ -15,12 +15,14 @@ def get_dataloader(root_path, split=False, batch_size=8, device='cuda', save_pat
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,
-                              fix_length=200)
+                              fix_length=200,
+                              batch_first=True)
     EN = torchtext.data.Field(tokenize=get_tokenizer('spacy'),
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,
-                              fix_length=200)
+                              fix_length=200,
+                              batch_first=True)
     data_fields = [('en', EN), ('vi', VI)]
     if split:
         train_data, val_data = torchtext.data.TabularDataset.splits(path=root_path, train='train.csv',

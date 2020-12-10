@@ -20,8 +20,6 @@ def train_one_epoch(model, data, optimizer, criterion, clip, device, pad_idx):
         trg = batch.vi
         src = src.to(device)
         trg = trg.to(device)
-        src = src.permute(1, 0)
-        trg = trg.permute(1, 0)
         trg_input = torch.zeros_like(trg).to(device)
         trg_input[:, :-1] = trg[:, 1:]
         trg_input[:, -1] = pad_idx
@@ -69,8 +67,9 @@ def train(config):
         device = 'cpu'
     train_data, val_data, en, vi = get_dataloader(
         config.data_dir, split=True, batch_size=config.batch_size, device=device)
-    pad_idx = vi.vocab.stoi[vi.pad_token]
-    model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)), en.vocab.stoi[en.pad_token])
+    src_pad_idx = en.vocab.stoi[en.pad_token]
+    trg_pad_idx = vi.vocab.stoi[vi.pad_token]
+    model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)), src_pad_idx, trg_pad_idx)
     model = model.to(device)
     model.apply(initialize_weights)
     print('Model parameter: ', count_parameters(model))

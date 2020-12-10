@@ -47,7 +47,8 @@ class MultiheadAttention(nn.Module):
         self.V_Linear = nn.Linear(d_model, d_model)
         self.final_linear = nn.Linear(d_model, d_model)
         self.num_head = num_head
-        self.droupout = nn.Dropout(p_drop)
+        self.qkv_droupout = nn.Dropout(p_drop)
+        self.qk_droupout = nn.Dropout(p_drop)
 
     def forward(self, Q, K, V, mask=None):
         q_projected = self.Q_Linear(Q)
@@ -56,23 +57,24 @@ class MultiheadAttention(nn.Module):
         b, seq_len, d_model = q_projected.shape
         hid_dim = d_model // self.num_head
         q_projected = q_projected.reshape(
-            [q_projected.shape[0], q_projected.shape[1], self.num_head, hid_dim])
+            [q_projected.shape[0], q_projected.shape[1], self.num_head, hid_dim]).permute(0, 2, 1, 3)
         k_projected = k_projected.reshape(
-            [k_projected.shape[0], k_projected.shape[1], self.num_head, hid_dim])
+            [k_projected.shape[0], k_projected.shape[1], self.num_head, hid_dim]).permute(0, 2, 3, 1)
         v_projected = v_projected.reshape(
-            [v_projected.shape[0], v_projected.shape[1], self.num_head, hid_dim])
+            [v_projected.shape[0], v_projected.shape[1], self.num_head, hid_dim]).permute(0, 2, 1, 3)
         # attention
-        atten = torch.einsum('bqhd,bkhd->bhqk', q_projected, k_projected)
+        atten = self.qk_droupout(torch.matmul(q_projected, k_projected))
         d_k = q_projected.shape[-1]
         atten /= np.sqrt(d_k)
         if mask is not None:
             atten.masked_fill(mask == 0, -1e10)
         atten = F.softmax(atten, dim=3)
-        atten = torch.einsum('bhqd,bdhv->bqhv', atten, v_projected)
+        atten = self.qk_droupout(atten)
+        atten = torch.matmul(atten, v_projected)
         # concatenate
-        atten = atten.reshape([b, seq_len, d_model])
+        atten = atten.permute(0, 2, 1, 3).reshape([b, seq_len, d_model])
         atten = self.final_linear(atten)
-        atten = self.droupout(atten)
+        atten = self.qkv_droupout(atten)
         return atten
 
 
@@ -90,8 +92,8 @@ class Encoder(nn.Module):
                                  nn.Linear(2048, d_model, bias=True),
                                  nn.Dropout(dropout))
 
-    def forward(self, x):
-        y = self.attention(x, x, x) + x
+    def forward(self, x, src_mask):
+        y = self.attention(x, x, x, src_mask) + x
         y = self.norm1(y)
         y = self.ffn(y) + y
         return self.norm2(y)
@@ -122,45 +124,49 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size, pad_idx, d_model=512, device='cuda', p_drop=0.1):
+    def __init__(self, vocab_size, src_pad_idx, trg_pad_idx, d_model=512, device='cuda', p_drop=0.1):
         """
         docstring
         """
         super(Transformer, self).__init__()
-        self.output_embeder = Embedding(vocab_size, d_model)
+        self.output_token_embedding = Embedding(vocab_size, d_model)
         self.pos_encoder = PositionalEmbedding(d_model, device)
-        self.embbeder = nn.Embedding(vocab_size, d_model)
-        self.encoder = nn.Sequential(*[Encoder(d_model, p_drop) for _ in range(6)])
+        self.src_token_embedding = nn.Embedding(vocab_size, d_model)
+        self.encoder = nn.ModuleList([Encoder(d_model, p_drop) for _ in range(6)])
         self.decoder = nn.ModuleList([Decoder(d_model, p_drop) for _ in range(6)])
         self.input_embedding_dropout = nn.Dropout(p_drop)
         self.output_embedding_dropout = nn.Dropout(p_drop)
-        self.pad_idx = pad_idx
+        self.src_pad_idx = src_pad_idx
+        self.trg_pad_idx = trg_pad_idx
         self.device = device
-        # self.decoder = Decoder(d_model)
-
+        self.d_model = d_model
+    
+    def make_masks(self, src, trg):
+        src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
+        trg_pad_msk = (trg != self.trg_pad_idx).unsqueeze(1).unsqueeze(3)
+        trg_mask = torch.tril(torch.ones((trg.shape[1], trg.shape[1]), dtype=torch.bool)).to(self.device)
+        trg_mask = trg_mask & trg_pad_msk
+        return src_mask, trg_mask
+        
     def forward(self, x, y):
-        src_mask = torch.ones_like(x).to(self.device)
-        src_mask[x == self.pad_idx] = 0
-        src_mask = src_mask.unsqueeze(1).unsqueeze(2)
-        trg_mask = torch.triu(torch.ones(
-                (y.shape[1], y.shape[1]), dtype=torch.bool), diagonal=1).to(self.device).unsqueeze(0).unsqueeze(1)
-        trg_mask = torch.cat(y.shape[0] * [trg_mask])
-        embed_x = self.embbeder(x)
+        src_mask, trg_mask = self.make_masks(x, y)
+        x_token = self.src_token_embedding(x) * np.sqrt(self.d_model)
         x_pos = self.pos_encoder(x).unsqueeze(0)
-        x = embed_x + x_pos
+        x = x_token + x_pos
         x = self.input_embedding_dropout(x)
-        x = self.encoder(x)
+        for layer in self.encoder:
+            x = layer(x, src_mask)
         y_pos = self.pos_encoder(y).unsqueeze(0)
-        y = self.output_embeder(y) + y_pos
+        y = self.output_token_embedding(y) + y_pos
         y = self.output_embedding_dropout(y)
         # decode
         for layer in self.decoder:
             y = layer(y, x, src_mask, trg_mask)
-        y = self.output_embeder(y, decode=True)
+        y = self.output_token_embedding(y, decode=True)
         return F.softmax(y)
 
 if __name__ == "__main__":
-    test = Transformer(16, 1, device='cpu')
+    test = Transformer(16, 1, 1, device='cpu')
     x = torch.rand([3, 16]).long()
     tg = torch.rand([3, 16]).long()
     out = test(tg, x)
