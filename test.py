@@ -15,7 +15,7 @@ def translate_sentence(sentence, src_field, trg_field, model, device, max_len=20
     else: 
         print('input', [src_field.vocab.itos[s] for s in sentence])
         src_tensor = sentence.unsqueeze(0)
-    src_pad_idx = en.vocab.stoi[src_field.pad_token]
+    src_pad_idx = src_field.vocab.stoi[src_field.pad_token]
     src_mask = (src_tensor != src_pad_idx).unsqueeze(1).unsqueeze(2)
     trg_input = [trg_field.vocab.stoi[trg_field.init_token]] * max_len
     trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(device)
