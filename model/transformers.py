@@ -26,7 +26,7 @@ class PositionalEmbedding(nn.Module):
 class Embedding(nn.Module):
     def __init__(self, vocab_size, d_model):
         super(Embedding, self).__init__()
-        self.embedding = nn.Embedding(vocab_size + 1, d_model)
+        self.embedding = nn.Embedding(vocab_size, d_model)
         self.decoder = nn.Linear(d_model, vocab_size, bias=False)
         self.embedding.weight = self.decoder.weight
         self.d_model = d_model
@@ -124,14 +124,14 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size, src_pad_idx, trg_pad_idx, d_model=512, device='cuda', p_drop=0.1):
+    def __init__(self, src_vocab_size, trg_vc, src_pad_idx, trg_pad_idx, d_model=512, device='cuda', p_drop=0.1):
         """
         docstring
         """
         super(Transformer, self).__init__()
-        self.output_token_embedding = Embedding(vocab_size, d_model)
+        self.output_token_embedding = Embedding(trg_vc, d_model)
         self.pos_encoder = PositionalEmbedding(d_model, device)
-        self.src_token_embedding = nn.Embedding(vocab_size, d_model)
+        self.src_token_embedding = nn.Embedding(src_vocab_size, d_model)
         self.encoder = nn.ModuleList([Encoder(d_model, p_drop) for _ in range(6)])
         self.decoder = nn.ModuleList([Decoder(d_model, p_drop) for _ in range(6)])
         self.input_embedding_dropout = nn.Dropout(p_drop)

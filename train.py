@@ -81,8 +81,8 @@ def train(config):
     src_pad_idx = en.vocab.stoi[en.pad_token]
     trg_pad_idx = vi.vocab.stoi[vi.pad_token]
     print('vocab size: en:', len(en.vocab.stoi), 'vi:', len(vi.vocab.stoi))
-    model = Transformer(max(len(en.vocab.stoi), len(
-        vi.vocab.stoi)), src_pad_idx, trg_pad_idx)
+    model = Transformer(len(en.vocab.stoi), len(
+        vi.vocab.stoi), src_pad_idx, trg_pad_idx)
     model = model.to(device)
     model.apply(initialize_weights)
     print('Model parameter: ', count_parameters(model))
