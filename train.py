@@ -84,13 +84,13 @@ def train(config):
         train_loss = train_one_epoch(
             model, train_data, optimizer, criterion, config.grad_clip_norm, device, pad_idx)
         print(train_loss)
-        writer.add_scalar('train', train_loss)
+        writer.add_scalar('train', train_loss, i)
         val_loss = evaluate(model, val_data, criterion, device)
-        writer.add_scalar('val loss', train_loss)
+        writer.add_scalar('val loss', val_loss, i)
         if val_loss < best_loss:
             torch.save(model.state_dict(), os.path.join(
                 config.snapshots_folder, "best.pth"))
-        if (i+1) % config.snapshot_iter == 0:
+        if (i + 1) % config.snapshot_iter == 0:
             torch.save(model.state_dict(), os.path.join(
                 config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
 
