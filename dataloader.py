@@ -23,7 +23,7 @@ def get_dataloader(root_path, train_file="train.csv", test_file="test.csv", batc
                               init_token='<sos>',
                               eos_token='<eos>',
                               lower=True,
-                              fix_length=200,
+                              fix_length=201,
                               batch_first=True)
     EN = torchtext.data.Field(tokenize=en_tokenize,
                               init_token='<sos>',

@@ -29,9 +29,9 @@ def train_one_iter(model, data, optimizer, criterion, clip, device, trg_init_idx
             # trg_input[:, 1:] = trg[:, 0:-1]
             # trg_input[:, 0] = trg_init_idx
     optimizer.zero_grad()
-    output = model(src, trg)  # turn off teacher forcing
+    output = model(src, trg[:,:-1])  # turn off teacher forcing
     output = output.reshape(-1, output.shape[-1])
-    trg = torch.reshape(trg, [-1])
+    trg = torch.reshape(trg[:, 1:], [-1])
     loss = criterion(output, trg)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), clip)

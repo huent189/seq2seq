@@ -24,7 +24,7 @@ def translate_sentence(sentence, src_field, trg_field, model, device, max_len=20
     for i in range(1, max_len, 1):
         with torch.no_grad():
             prediction = model(src_tensor, trg_input)
-            pred_token = prediction.argmax(2)[:, -1].item()
+            pred_token = prediction.argmax(2)[:, i-1].item()
             # print(trg_field.vocab.itos[pred_token])
             trg_input[0][i] = pred_token
             
