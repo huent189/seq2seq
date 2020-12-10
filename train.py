@@ -102,6 +102,7 @@ def train(config):
                 writer.add_scalar('train', epoch_loss / (config.snapshot_iter // 10), count)
                 epoch_loss = 0
                 translate_sentence(batch.en[0], en, vi, model, device)
+                model.train()
 
 
 if __name__ == "__main__":
