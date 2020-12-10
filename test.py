@@ -20,6 +20,7 @@ def translate_sentence(sentence, src_field, trg_field, model, device, max_len=20
     trg_input = [trg_field.vocab.stoi[trg_field.init_token]] * max_len
     trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(device)
     model.eval()
+    last_idx = -1
     for i in range(1, max_len, 1):
         with torch.no_grad():
             prediction = model(src_tensor, trg_input)
@@ -28,10 +29,14 @@ def translate_sentence(sentence, src_field, trg_field, model, device, max_len=20
             trg_input[0][i] = pred_token
             
             if pred_token == trg_field.vocab.stoi[trg_field.eos_token]:
-                trg_input[0] = trg_input[0][:i]
+                # trg_input[0] = trg_input[0][:i]
+                last_idx = i
                 break
-
-    trg_tokens = [trg_field.vocab.itos[i] for i in trg_input[0]]
+    if last_idx == -1:
+        pred = trg_input[0]
+    else:
+        pred = trg_input[0][:last_idx]
+    trg_tokens = [trg_field.vocab.itos[i] for i in pred]
     print(trg_tokens)
     return trg_tokens[1:]
 
