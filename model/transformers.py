@@ -63,7 +63,7 @@ class MultiheadAttention(nn.Module):
         v_projected = v_projected.reshape(
             [v_projected.shape[0], v_projected.shape[1], self.num_head, hid_dim]).permute(0, 2, 1, 3)
         # attention
-        atten = self.qk_droupout(torch.matmul(q_projected, k_projected))
+        atten = torch.matmul(q_projected, k_projected)
         d_k = q_projected.shape[-1]
         atten /= np.sqrt(d_k)
         if mask is not None:
@@ -119,8 +119,10 @@ class DecoderLayer(nn.Module):
         docstring
         """
         y = self.norm1(self.trg_attention(tg, tg, tg, trg_mask) + tg)
-        y = self.norm2(self.encoder_attention(y, encoded_input, encoded_input, src_mask) + y)
+        y = self.norm2(self.encoder_attention(
+            y, encoded_input, encoded_input, src_mask) + y)
         return self.norm3(self.ffn(y) + y)
+
 
 class Encoder(nn.Module):
     def __init__(self, d_model, p_drop, src_vocab_size, n_layers, device):
@@ -129,7 +131,9 @@ class Encoder(nn.Module):
         self.pos_embedding = PositionalEmbedding(d_model, device)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
-        self.encode_layers = nn.ModuleList([EncoderLayer(d_model, p_drop) for _ in range(n_layers)])
+        self.encode_layers = nn.ModuleList(
+            [EncoderLayer(d_model, p_drop) for _ in range(n_layers)])
+
     def forward(self, x, src_mask):
         # x.shape: b, seq_len
         seq_len = x.shape[1]
@@ -140,6 +144,7 @@ class Encoder(nn.Module):
             encoded_x = layer(encoded_x, src_mask)
         return encoded_x
 
+
 class Decoder(nn.Module):
     def __init__(self, d_model, p_drop, trg_vocab_size, n_layers, device):
         super(Decoder, self).__init__()
@@ -147,43 +152,50 @@ class Decoder(nn.Module):
         self.pos_embedding = PositionalEmbedding(trg_vocab_size, d_model)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
-        self.decode_layers = nn.ModuleList([DecoderLayer(d_model, p_drop) for _ in range(n_layers)])
+        self.decode_layers = nn.ModuleList(
+            [DecoderLayer(d_model, p_drop) for _ in range(n_layers)])
         self.fc = nn.Linear(d_model, trg_vocab_size)
+
     def forward(self, x, y, src_mask, trg_mask):
         encoded_tok = self.tok_embedding(y) * (self.d_model ** (-0.5))
         encoded_pos = self.pos_embedding(y)
         encoded_y = self.do(encoded_tok + encoded_pos)
-        for layer  in self.decode_layers:
+        for layer in self.decode_layers:
             encoded_y = layer(encoded_y, x, src_mask, trg_mask)
         output = self.fc(encoded_y)
         return output
-        
+
+
 class Transformer(nn.Module):
-    def __init__(self, src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, n_layers = 6, d_model=512, device='cuda', p_drop=0.1):
+    def __init__(self, src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, n_layers=6, d_model=512, device='cuda', p_drop=0.1):
         """
         docstring
         """
         super(Transformer, self).__init__()
-        self.encoder = Encoder(d_model, p_drop, src_vocab_size, n_layers, device)
-        self.decoder = Decoder(d_model, p_drop, trg_vocab_size, n_layers, device)
+        self.encoder = Encoder(
+            d_model, p_drop, src_vocab_size, n_layers, device)
+        self.decoder = Decoder(
+            d_model, p_drop, trg_vocab_size, n_layers, device)
         self.src_pad_idx = src_pad_idx
         self.trg_pad_idx = trg_pad_idx
         self.device = device
-    
+
     def make_masks(self, src, trg):
-        #mask shape: b, 1, seq_len, seq_len
-        #seq shape: b, shape
+        # mask shape: b, 1, seq_len, seq_len
+        # seq shape: b, shape
         src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
         trg_pad_msk = (trg != self.trg_pad_idx).unsqueeze(1).unsqueeze(3)
-        trg_mask = torch.tril(torch.ones((trg.shape[1], trg.shape[1]), dtype=torch.bool)).to(self.device)
+        trg_mask = torch.tril(torch.ones(
+            (trg.shape[1], trg.shape[1]), dtype=torch.bool)).to(self.device)
         trg_mask = trg_mask & trg_pad_msk
         return src_mask, trg_mask
-        
+
     def forward(self, x, y):
         src_mask, trg_mask = self.make_masks(x, y)
         context = self.encoder(x, src_mask)
         output = self.decoder(context, y, src_mask, trg_mask)
         return output
+
     def translate_sentence(self, x, src_vocab, trg_vocab, max_len=200):
         # x.shape: seq_len
         eval()
@@ -195,11 +207,11 @@ class Transformer(nn.Module):
         for i in range(max_len):
             pred = self.decoder(encoded_x, trg_input, src_mask, trg_mask)
             pred = pred.argmax(dim=-1)
-            trg_input[0,i+1] = pred[0,i]
-            if pred[0,i] == trg_vocab.vocab.stoi[trg_vocab.eos_token]:
+            trg_input[0, i + 1] = pred[0, i]
+            if pred[0, i] == trg_vocab.vocab.stoi[trg_vocab.eos_token]:
                 last_idx = i
                 break
-        final_pred = trg_input[0,:i]
+        final_pred = trg_input[0, :i]
         trg_tokens = [trg_vocab.vocab.itos[i] for i in final_pred]
         print(trg_tokens)
         return final_pred
