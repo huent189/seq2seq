@@ -55,7 +55,7 @@ def count_parameters(model):
 
 
 def train(config):
-    os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
+    # os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
     if config.gpu_id != '-1':
         device = 'cuda'
     else:
