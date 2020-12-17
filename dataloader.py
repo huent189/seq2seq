@@ -1,7 +1,7 @@
 import torchtext
 from pyvi import ViTokenizer
 import os
-import dill
+# import dill
 import torch
 from torchtext.data.utils import get_tokenizer
 import html

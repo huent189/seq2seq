@@ -60,8 +60,12 @@ def train(config):
         device = 'cuda'
     else:
         device = 'cpu'
-    train_data, val_data, en, vi = get_dataloader(
-        config.data_dir, batch_size=config.batch_size, device=device)
+    if config.load_vocab is not None:
+        train_data, val_data, en, vi = get_dataloader(
+            config.data_dir, batch_size=config.batch_size, device=device, reload=config.load_vocab)
+    else:
+        train_data, val_data, en, vi = get_dataloader(
+            config.data_dir, batch_size=config.batch_size, device=device, save_path=config.snapshots_folder)
     src_pad_idx = en.vocab.stoi[en.pad_token]
     trg_pad_idx = vi.vocab.stoi[vi.pad_token]
     print('vocab size: en:', len(en.vocab.stoi), 'vi:', len(vi.vocab.stoi))
@@ -118,6 +122,7 @@ if __name__ == "__main__":
     parser.add_argument('--snapshot_iter', type=int, default=10)
     parser.add_argument('--snapshots_folder', type=str, default="snapshot")
     parser.add_argument('--pretrain_model', type=str, default="")
+    parser.add_argument('--load_vocab', type=str)
     parser.add_argument('--gpu_id', type=str, default='0')
     config = parser.parse_args()
     writer = SummaryWriter(log_dir=config.log_dir)

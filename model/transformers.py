@@ -129,7 +129,7 @@ class Encoder(nn.Module):
         self.pos_embedding = PositionalEmbedding(d_model, device)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
-        self.encode_layers = nn.ModuleList([EncoderLayer(d_model, p_drop)] for _ in range(n_layers))
+        self.encode_layers = nn.ModuleList([EncoderLayer(d_model, p_drop) for _ in range(n_layers)])
     def forward(self, x, src_mask):
         # x.shape: b, seq_len
         seq_len = x.shape[1]
