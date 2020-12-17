@@ -45,15 +45,15 @@ def get_dataloader(root_path, train_file="train.csv", test_file="test.csv", batc
         shuffle=True
     )
     if reload is not None:
-        VI = torch.load(os.path.join(reload, "VI.Field"), pickle_module=dill)
-        EN = torch.load(os.path.join(reload, "EN.Field"), pickle_module=dill)
+        VI = torch.load(os.path.join(reload, "VI.Field"))
+        EN = torch.load(os.path.join(reload, "EN.Field"))
     else:
         print('build vocab')
         VI.build_vocab(train_data)
         EN.build_vocab(train_data)
     if save_path:
-        torch.save(VI, os.path.join(save_path, "VI.Field"), pickle_module=dill)
-        torch.save(EN, os.path.join(save_path, "EN.Field"), pickle_module=dill)
+        torch.save(VI, os.path.join(save_path, "VI.Field"))
+        torch.save(EN, os.path.join(save_path, "EN.Field"))
     return train_iter, val_iter, EN, VI
 
 

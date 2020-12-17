@@ -22,20 +22,20 @@ class PositionalEmbedding(nn.Module):
         return PE
 
 
-# both source target embedding and output decoding
-class Embedding(nn.Module):
-    def __init__(self, vocab_size, d_model):
-        super(Embedding, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, d_model)
-        self.decoder = nn.Linear(d_model, vocab_size, bias=False)
-        self.embedding.weight = self.decoder.weight
-        self.d_model = d_model
+# # both source target embedding and output decoding
+# class Embedding(nn.Module):
+#     def __init__(self, vocab_size, d_model):
+#         super(Embedding, self).__init__()
+#         self.embedding = nn.Embedding(vocab_size, d_model)
+#         self.decoder = nn.Linear(d_model, vocab_size, bias=False)
+#         self.embedding.weight = self.decoder.weight
+#         self.d_model = d_model
 
-    def forward(self, x, decode=False):
-        if decode:
-            return self.decoder(x)
-        x = self.embedding(x)
-        return x * np.sqrt(self.d_model)
+#     def forward(self, x, decode=False):
+#         if decode:
+#             return self.decoder(x)
+#         x = self.embedding(x)
+#         return x * np.sqrt(self.d_model)
 
 
 class MultiheadAttention(nn.Module):
@@ -78,19 +78,19 @@ class MultiheadAttention(nn.Module):
         return atten
 
 
-class Encoder(nn.Module):
+class EncoderLayer(nn.Module):
     def __init__(self, d_model, dropout):
         """
         docstring
         """
-        super(Encoder, self).__init__()
+        super(EncoderLayer, self).__init__()
         self.attention = MultiheadAttention(d_model, 8, dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.ffn = nn.Sequential(nn.Linear(d_model, 2048, bias=True),
                                  nn.ReLU(),
-                                 nn.Linear(2048, d_model, bias=True),
-                                 nn.Dropout(dropout))
+                                 nn.Dropout(dropout),
+                                 nn.Linear(2048, d_model, bias=True))
 
     def forward(self, x, src_mask):
         y = self.attention(x, x, x, src_mask) + x
@@ -99,12 +99,12 @@ class Encoder(nn.Module):
         return self.norm2(y)
 
 
-class Decoder(nn.Module):
+class DecoderLayer(nn.Module):
     def __init__(self, d_model, p_drop):
         """
         docstring
         """
-        super(Decoder, self).__init__()
+        super(DecoderLayer, self).__init__()
         self.trg_attention = MultiheadAttention(d_model, 8, p_drop)
         self.norm1 = nn.LayerNorm(d_model)
         self.encoder_attention = MultiheadAttention(d_model, 8, p_drop)
@@ -119,29 +119,60 @@ class Decoder(nn.Module):
         docstring
         """
         y = self.norm1(self.trg_attention(tg, tg, tg, trg_mask) + tg)
-        y = self.norm2(self.encoder_attention(encoded_input, encoded_input, tg, src_mask) + y)
+        y = self.norm2(self.encoder_attention(y, encoded_input, encoded_input, src_mask) + y)
         return self.norm3(self.ffn(y) + y)
 
+class Encoder(nn.Module):
+    def __init__(self, d_model, p_drop, src_vocab_size, n_layers, device):
+        super(Encoder, self).__init__()
+        self.tok_embedding = nn.Embedding(src_vocab_size, d_model)
+        self.pos_embedding = PositionalEmbedding(d_model, device)
+        self.d_model = d_model
+        self.do = nn.Dropout(p_drop)
+        self.encode_layers = nn.ModuleList([EncoderLayer(d_model, p_drop)] for _ in range(n_layers))
+    def forward(self, x, src_mask):
+        # x.shape: b, seq_len
+        seq_len = x.shape[1]
+        encoded_tok = self.tok_embedding(x) * (self.d_model ** (-0.5))
+        encoded_pos = self.pos_embedding(x)
+        encoded_x = self.do(encoded_pos + encoded_tok)
+        for layer in self.encode_layers:
+            encoded_x = layer(encoded_x, src_mask)
+        return encoded_x
 
+class Decoder(nn.Module):
+    def __init__(self, d_model, p_drop, trg_vocab_size, n_layers, device):
+        super(Decoder, self).__init__()
+        self.tok_embedding = nn.Embedding(trg_vocab_size, d_model)
+        self.pos_embedding = PositionalEmbedding(trg_vocab_size, d_model)
+        self.d_model = d_model
+        self.do = nn.Dropout(p_drop)
+        self.decode_layers = nn.ModuleList([DecoderLayer(d_model, p_drop) for _ in range(n_layers)])
+        self.fc = nn.Linear(d_model, trg_vocab_size)
+    def forward(self, x, y, src_mask, trg_mask):
+        encoded_tok = self.tok_embedding(y) * (self.d_model ** (-0.5))
+        encoded_pos = self.pos_embedding(y)
+        encoded_y = self.do(encoded_tok + encoded_pos)
+        for layer  in self.decode_layers:
+            encoded_y = layer(encoded_y, x, src_mask, trg_mask)
+        output = self.fc(encoded_y)
+        return output
+        
 class Transformer(nn.Module):
-    def __init__(self, src_vocab_size, trg_vc, src_pad_idx, trg_pad_idx, d_model=512, device='cuda', p_drop=0.1):
+    def __init__(self, src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, n_layers = 6, d_model=512, device='cuda', p_drop=0.1):
         """
         docstring
         """
         super(Transformer, self).__init__()
-        self.output_token_embedding = Embedding(trg_vc, d_model)
-        self.pos_encoder = PositionalEmbedding(d_model, device)
-        self.src_token_embedding = nn.Embedding(src_vocab_size, d_model)
-        self.encoder = nn.ModuleList([Encoder(d_model, p_drop) for _ in range(6)])
-        self.decoder = nn.ModuleList([Decoder(d_model, p_drop) for _ in range(6)])
-        self.input_embedding_dropout = nn.Dropout(p_drop)
-        self.output_embedding_dropout = nn.Dropout(p_drop)
+        self.encoder = Encoder(d_model, p_drop, src_vocab_size, n_layers, device)
+        self.decoder = Decoder(d_model, p_drop, trg_vocab_size, n_layers, device)
         self.src_pad_idx = src_pad_idx
         self.trg_pad_idx = trg_pad_idx
         self.device = device
-        self.d_model = d_model
     
     def make_masks(self, src, trg):
+        #mask shape: b, 1, seq_len, seq_len
+        #seq shape: b, shape
         src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
         trg_pad_msk = (trg != self.trg_pad_idx).unsqueeze(1).unsqueeze(3)
         trg_mask = torch.tril(torch.ones((trg.shape[1], trg.shape[1]), dtype=torch.bool)).to(self.device)
@@ -150,24 +181,31 @@ class Transformer(nn.Module):
         
     def forward(self, x, y):
         src_mask, trg_mask = self.make_masks(x, y)
-        x_token = self.src_token_embedding(x) * np.sqrt(self.d_model)
-        x_pos = self.pos_encoder(x).unsqueeze(0)
-        x = x_token + x_pos
-        x = self.input_embedding_dropout(x)
-        for layer in self.encoder:
-            x = layer(x, src_mask)
-        y_pos = self.pos_encoder(y).unsqueeze(0)
-        y = self.output_token_embedding(y) + y_pos
-        y = self.output_embedding_dropout(y)
-        # decode
-        for layer in self.decoder:
-            y = layer(y, x, src_mask, trg_mask)
-        y = self.output_token_embedding(y, decode=True)
-        # return F.softmax(y)
-        return y
+        context = self.encoder(x, src_mask)
+        output = self.decoder(context, y, src_mask, trg_mask)
+        return output
+    def translate_sentence(self, x, src_vocab, trg_vocab, max_len=200):
+        # x.shape: seq_len
+        eval()
+        trg_input = [trg_vocab.vocab.stoi[trg_vocab.init_token]] * max_len
+        trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(self.device)
+        src_mask, trg_mask = self.make_masks(x, trg_input)
+        encoded_x = self.encoder(x, src_mask)
+        last_idx = -1
+        for i in range(max_len):
+            pred = self.decoder(encoded_x, trg_input, src_mask, trg_mask)
+            pred = pred.argmax(dim=-1)
+            trg_input[0,i+1] = pred[0,i]
+            if pred[0,i] == trg_vocab.vocab.stoi[trg_vocab.eos_token]:
+                last_idx = i
+                break
+        final_pred = trg_input[0,:i]
+        trg_tokens = [trg_vocab.vocab.itos[i] for i in final_pred]
+        print(trg_tokens)
+        return final_pred
 
-if __name__ == "__main__":
-    test = Transformer(16, 1, 1, device='cpu')
-    x = torch.rand([3, 16]).long()
-    tg = torch.rand([3, 16]).long()
-    out = test(tg, x)
+# if __name__ == "__main__":
+#     # test = Transformer(16, 1, 1, device='cpu')
+#     # x = torch.rand([3, 16]).long()
+#     # tg = torch.rand([3, 16]).long()
+#     # out = test(tg, x)
