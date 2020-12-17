@@ -7,6 +7,7 @@ import torch.nn.functional as F
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, device):
         super(PositionalEmbedding, self).__init__()
+        # print('pos_set_decoder', d_model)
         self.d_model = d_model
         self.device = device
 
@@ -15,7 +16,11 @@ class PositionalEmbedding(nn.Module):
         dividend = torch.exp(torch.log(torch.Tensor(
             [10000])) * torch.arange(0, self.d_model, 2) / self.d_model)
         # print(dividend)
-        PE = torch.zeros([x.shape[1], self.d_model]).to(self.device)
+        # print('dmodel', self.d_model)
+        PE = torch.zeros([x.shape[1], self.d_model])
+        # print('postional shape', PE.shape)
+        if self.device == 'cuda':
+            PE = PE.cuda()
         # print(pos * dividend)
         PE[:, 0::2] = torch.sin(pos * dividend)
         PE[:, 1::2] = torch.cos(pos * dividend)
@@ -128,6 +133,7 @@ class Encoder(nn.Module):
     def __init__(self, d_model, p_drop, src_vocab_size, n_layers, device):
         super(Encoder, self).__init__()
         self.tok_embedding = nn.Embedding(src_vocab_size, d_model)
+        # print('encodeer_dmodel', d_model)
         self.pos_embedding = PositionalEmbedding(d_model, device)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
@@ -149,7 +155,8 @@ class Decoder(nn.Module):
     def __init__(self, d_model, p_drop, trg_vocab_size, n_layers, device):
         super(Decoder, self).__init__()
         self.tok_embedding = nn.Embedding(trg_vocab_size, d_model)
-        self.pos_embedding = PositionalEmbedding(trg_vocab_size, d_model)
+        # print('decodeer_dmodel', d_model)
+        self.pos_embedding = PositionalEmbedding(d_model, device)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
         self.decode_layers = nn.ModuleList(
@@ -159,6 +166,7 @@ class Decoder(nn.Module):
     def forward(self, x, y, src_mask, trg_mask):
         encoded_tok = self.tok_embedding(y) * (self.d_model ** (-0.5))
         encoded_pos = self.pos_embedding(y)
+        # print(encoded_tok.shape, encoded_pos.shape)
         encoded_y = self.do(encoded_tok + encoded_pos)
         for layer in self.decode_layers:
             encoded_y = layer(encoded_y, x, src_mask, trg_mask)
@@ -167,7 +175,7 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx, n_layers=6, d_model=512, device='cuda', p_drop=0.1):
+    def __init__(self, src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx,  device, n_layers=6, d_model=512, p_drop=0.1):
         """
         docstring
         """
@@ -186,7 +194,9 @@ class Transformer(nn.Module):
         src_mask = (src != self.src_pad_idx).unsqueeze(1).unsqueeze(2)
         trg_pad_msk = (trg != self.trg_pad_idx).unsqueeze(1).unsqueeze(3)
         trg_mask = torch.tril(torch.ones(
-            (trg.shape[1], trg.shape[1]), dtype=torch.bool)).to(self.device)
+            (trg.shape[1], trg.shape[1]), dtype=torch.bool))
+        if self.device == 'cuda':
+            trg_mask = trg_mask.cuda()
         trg_mask = trg_mask & trg_pad_msk
         return src_mask, trg_mask
 
@@ -198,9 +208,11 @@ class Transformer(nn.Module):
 
     def translate_sentence(self, x, src_vocab, trg_vocab, max_len=200):
         # x.shape: seq_len
-        eval()
+        self.eval()
         trg_input = [trg_vocab.vocab.stoi[trg_vocab.init_token]] * max_len
-        trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(self.device)
+        trg_input = torch.LongTensor(trg_input).unsqueeze(0)
+        if self.device == 'cuda':
+            trg_input = trg_input.cuda()
         src_mask, trg_mask = self.make_masks(x, trg_input)
         encoded_x = self.encoder(x, src_mask)
         last_idx = -1
@@ -216,8 +228,8 @@ class Transformer(nn.Module):
         print(trg_tokens)
         return final_pred
 
-# if __name__ == "__main__":
-#     # test = Transformer(16, 1, 1, device='cpu')
-#     # x = torch.rand([3, 16]).long()
-#     # tg = torch.rand([3, 16]).long()
-#     # out = test(tg, x)
+if __name__ == "__main__":
+    test = Transformer(16, 16,  1, 1, device='cpu')
+    x = torch.rand([3, 16]).long()
+    tg = torch.rand([3, 16]).long()
+    out = test(tg, x)
