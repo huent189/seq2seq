@@ -6,6 +6,7 @@ import torch
 from torchtext.data.utils import get_tokenizer
 import html
 def vi_tokenize(text):
+    text = html.unescape(text)
     text = ViTokenizer.tokenize(text)
     text = text.split()
     # print(text)

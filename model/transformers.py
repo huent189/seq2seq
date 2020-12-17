@@ -27,20 +27,20 @@ class PositionalEmbedding(nn.Module):
         return PE
 
 
-# # both source target embedding and output decoding
-# class Embedding(nn.Module):
-#     def __init__(self, vocab_size, d_model):
-#         super(Embedding, self).__init__()
-#         self.embedding = nn.Embedding(vocab_size, d_model)
-#         self.decoder = nn.Linear(d_model, vocab_size, bias=False)
-#         self.embedding.weight = self.decoder.weight
-#         self.d_model = d_model
+# # # both source target embedding and output decoding
+# # class Embedding(nn.Module):
+# #     def __init__(self, vocab_size, d_model):
+# #         super(Embedding, self).__init__()
+# #         self.embedding = nn.Embedding(vocab_size, d_model)
+# #         self.decoder = nn.Linear(d_model, vocab_size, bias=False)
+# #         self.embedding.weight = self.decoder.weight
+# #         self.d_model = d_model
 
-#     def forward(self, x, decode=False):
-#         if decode:
-#             return self.decoder(x)
-#         x = self.embedding(x)
-#         return x * np.sqrt(self.d_model)
+# #     def forward(self, x, decode=False):
+# #         if decode:
+# #             return self.decoder(x)
+# #         x = self.embedding(x)
+# #         return x * np.sqrt(self.d_model)
 
 
 class MultiheadAttention(nn.Module):
@@ -74,7 +74,7 @@ class MultiheadAttention(nn.Module):
         if mask is not None:
             atten = atten.masked_fill(mask == 0, -1e10)
         atten = F.softmax(atten, dim=3)
-        atten = self.qk_droupout(atten)
+        # atten = self.qk_droupout(atten)
         atten = torch.matmul(atten, v_projected)
         # concatenate
         atten = atten.permute(0, 2, 1, 3).reshape([b, seq_len, d_model])
@@ -90,6 +90,7 @@ class EncoderLayer(nn.Module):
         """
         super(EncoderLayer, self).__init__()
         self.attention = MultiheadAttention(d_model, 8, dropout)
+        
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.ffn = nn.Sequential(nn.Linear(d_model, 2048, bias=True),
@@ -139,11 +140,13 @@ class Encoder(nn.Module):
         self.do = nn.Dropout(p_drop)
         self.encode_layers = nn.ModuleList(
             [EncoderLayer(d_model, p_drop) for _ in range(n_layers)])
-
+        self.scale = torch.sqrt(torch.FloatTensor([d_model])).to(device)
+        
     def forward(self, x, src_mask):
         # x.shape: b, seq_len
         seq_len = x.shape[1]
-        encoded_tok = self.tok_embedding(x) * (self.d_model ** (-0.5))
+        # encoded_tok = self.tok_embedding(x) * (self.d_model ** (-0.5))
+        encoded_tok = self.tok_embedding(x) * self.scale
         encoded_pos = self.pos_embedding(x)
         encoded_x = self.do(encoded_pos + encoded_tok)
         for layer in self.encode_layers:
@@ -162,18 +165,17 @@ class Decoder(nn.Module):
         self.decode_layers = nn.ModuleList(
             [DecoderLayer(d_model, p_drop) for _ in range(n_layers)])
         self.fc = nn.Linear(d_model, trg_vocab_size)
-
+        self.device = device
+        self.scale = torch.sqrt(torch.FloatTensor([d_model])).to(device)
     def forward(self, x, y, src_mask, trg_mask):
-        encoded_tok = self.tok_embedding(y) * (self.d_model ** (-0.5))
         encoded_pos = self.pos_embedding(y)
+        encoded_tok = self.tok_embedding(y) * self.scale
         # print(encoded_tok.shape, encoded_pos.shape)
         encoded_y = self.do(encoded_tok + encoded_pos)
         for layer in self.decode_layers:
             encoded_y = layer(encoded_y, x, src_mask, trg_mask)
         output = self.fc(encoded_y)
         return output
-
-
 class Transformer(nn.Module):
     def __init__(self, src_vocab_size, trg_vocab_size, src_pad_idx, trg_pad_idx,  device, n_layers=6, d_model=512, p_drop=0.1):
         """
@@ -208,6 +210,7 @@ class Transformer(nn.Module):
 
     def translate_sentence(self, x, src_vocab, trg_vocab, max_len=200):
         # x.shape: seq_len
+        x = x.unsqueeze(0)
         self.eval()
         trg_input = [trg_vocab.vocab.stoi[trg_vocab.init_token]] * max_len
         trg_input = torch.LongTensor(trg_input).unsqueeze(0)
@@ -216,20 +219,21 @@ class Transformer(nn.Module):
         src_mask, trg_mask = self.make_masks(x, trg_input)
         encoded_x = self.encoder(x, src_mask)
         last_idx = -1
-        for i in range(max_len):
+        for i in range(max_len-1):
             pred = self.decoder(encoded_x, trg_input, src_mask, trg_mask)
             pred = pred.argmax(dim=-1)
             trg_input[0, i + 1] = pred[0, i]
             if pred[0, i] == trg_vocab.vocab.stoi[trg_vocab.eos_token]:
                 last_idx = i
                 break
-        final_pred = trg_input[0, :i]
+        final_pred = trg_input[0, :last_idx]
         trg_tokens = [trg_vocab.vocab.itos[i] for i in final_pred]
         print(trg_tokens)
         return final_pred
 
 if __name__ == "__main__":
-    test = Transformer(16, 16,  1, 1, device='cpu')
+    test = Transformer(16, 16,  1, 1, device='cuda')
     x = torch.rand([3, 16]).long()
     tg = torch.rand([3, 16]).long()
     out = test(tg, x)
+   
