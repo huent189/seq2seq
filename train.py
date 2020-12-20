@@ -15,30 +15,43 @@ def initialize_weights(m):
     if hasattr(m, 'weight') and m.weight.dim() > 1:
         torch.nn.init.xavier_uniform_(m.weight.data)
 
-
-def train_one_iter(model, data, optimizer, criterion, clip, device):
-    src = data.en
-    trg = data.vi
-    optimizer.zero_grad()
-    src = src.to(device)
-    trg = trg.to(device)
+count = 0
+def train_one_iter(model, train_data, optimizer, criterion, clip, device, en, vi):
+    global count
+    model.train()
+    epoch_loss = 0
+    for i, data in tqdm(enumerate(train_data)):
+      src = data.vi_no_accents
+      trg = data.vi
+      # optimizer.zero_grad()
+      src = src.to(device)
+      trg = trg.to(device)
     
-    output = model(src, trg[:,:-1])  # turn off teacher forcing
-    output = output.contiguous().view(-1, output.shape[-1])
-    trg = trg[:,1:].contiguous().view(-1)
-    loss = criterion(output, trg)
-    loss.backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-    optimizer.step()
-    return loss.item()
+      output = model(src, trg[:,:-1])  # turn off teacher forcing
+      output = output.contiguous().view(-1, output.shape[-1])
+      trg = trg[:,1:].contiguous().view(-1)
+      loss = criterion(output, trg)
+      # if ((i + 1) % 8 == 0):
+      loss.backward()
+      torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+      optimizer.step()
+      optimizer.zero_grad()
+      epoch_loss += loss.item()
+      count += 1
+      if count % 400 == 0:
+        writer.add_scalar('train per iter', loss.item(), count)
+        print('train_per_iter:', loss.item())
+        model.translate_sentence(data.vi_no_accents[0], en, vi, 50)
+        model.train()
+    return epoch_loss /len(train_data)
 
 
 def evaluate(model, data, criterion, device):
     model.eval()
     epoch_loss = 0
     with torch.no_grad():
-        for i, batch in tqdm(enumerate(data)):
-            src = batch.en
+        for i, batch in enumerate(data):
+            src = batch.vi_no_accents
             trg = batch.vi
             src = src.to(device)
             trg = trg.to(device)
@@ -71,7 +84,7 @@ def train(config):
     trg_pad_idx = vi.vocab.stoi[vi.pad_token]
     print('vocab size: en:', len(en.vocab.stoi), 'vi:', len(vi.vocab.stoi))
     model = Transformer(len(en.vocab.stoi), len(
-        vi.vocab.stoi), src_pad_idx, trg_pad_idx, device, d_model=256)
+        vi.vocab.stoi), src_pad_idx, trg_pad_idx, device, d_model=256, n_layers=5)
     model = model.to(device)
     model.apply(initialize_weights)
     print('Model parameter: ', count_parameters(model))
@@ -79,34 +92,31 @@ def train(config):
         model.load_state_dict(torch.load(config.pretrain_model))
     criterion = torch.nn.CrossEntropyLoss(ignore_index=trg_pad_idx)
     # todo warm up cool down lr
-    optimizer = NoamOpt(512, 0.1, 2000, torch.optim.Adam(
+    optimizer = NoamOpt(512, 1, 2000, torch.optim.Adam(
         model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+    # optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, betas=(0.9, 0.98), eps=1e-9)
     best_loss = 100
-    count = 0
+    # count = 0
+    # epoch_loss = 0
     for i in range(config.num_epochs):
-        model.train()
-        epoch_loss = 0
-        for i, batch in tqdm(enumerate(train_data)):
-            train_loss = train_one_iter(
-                model, batch, optimizer, criterion, config.grad_clip_norm, device)
-            epoch_loss += train_loss
-            count += 1
-            if count % config.snapshot_iter == 0:
-                torch.save(model.state_dict(), os.path.join(
-                    config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
-                val_loss = evaluate(model, val_data, criterion, device)
-                writer.add_scalar('val loss', val_loss, i)
-                print('val_loss:', val_loss)
-                if val_loss < best_loss:
-                    torch.save(model.state_dict(), os.path.join(
-                        config.snapshots_folder, "best.pth"))
-            if count % (config.snapshot_iter // 10) == 0:
-                writer.add_scalar('train', epoch_loss /
-                                  (config.snapshot_iter // 10), count)
-                print('train_loss:', epoch_loss / (config.snapshot_iter // 10))
-                epoch_loss = 0
-                model.translate_sentence(batch.en[0], en, vi)
-                model.train()
+        # model.train()
+        # for j, batch in tqdm(enumerate(train_data)):
+        train_loss = train_one_iter(
+                model, train_data, optimizer, criterion, config.grad_clip_norm, device, en, vi)
+        writer.add_scalar('train', train_loss, i)
+        print('train_avg:', train_loss)
+        
+            # epoch_loss += train_loss
+            # count += 1
+        # if count % config.snapshot_iter == 0:
+        torch.save(model.state_dict(), os.path.join(
+            config.snapshots_folder, "Epoch_" + str(i) + '.pth'))
+        val_loss = evaluate(model, val_data, criterion, device)
+        writer.add_scalar('val loss', val_loss, i)
+        print('val_loss:', val_loss)
+        if val_loss < best_loss:
+            torch.save(model.state_dict(), os.path.join(
+                config.snapshots_folder, "best.pth"))
 
 
 if __name__ == "__main__":
@@ -127,5 +137,5 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, default='0')
     config = parser.parse_args()
     writer = SummaryWriter(log_dir=config.log_dir)
-    seed_all(2345)
+    seed_all(18921)
     train(config)

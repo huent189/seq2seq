@@ -74,7 +74,7 @@ class MultiheadAttention(nn.Module):
         if mask is not None:
             atten = atten.masked_fill(mask == 0, -1e10)
         atten = F.softmax(atten, dim=3)
-        # atten = self.qk_droupout(atten)
+        atten = self.qk_droupout(atten)
         atten = torch.matmul(atten, v_projected)
         # concatenate
         atten = atten.permute(0, 2, 1, 3).reshape([b, seq_len, d_model])
@@ -89,14 +89,14 @@ class EncoderLayer(nn.Module):
         docstring
         """
         super(EncoderLayer, self).__init__()
-        self.attention = MultiheadAttention(d_model, 8, dropout)
+        self.attention = MultiheadAttention(d_model, 4, dropout)
         
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
-        self.ffn = nn.Sequential(nn.Linear(d_model, 2048, bias=True),
+        self.ffn = nn.Sequential(nn.Linear(d_model, 1024, bias=True),
                                  nn.ReLU(),
                                  nn.Dropout(dropout),
-                                 nn.Linear(2048, d_model, bias=True))
+                                 nn.Linear(1024, d_model, bias=True))
 
     def forward(self, x, src_mask):
         y = self.attention(x, x, x, src_mask) + x
@@ -111,13 +111,13 @@ class DecoderLayer(nn.Module):
         docstring
         """
         super(DecoderLayer, self).__init__()
-        self.trg_attention = MultiheadAttention(d_model, 8, p_drop)
+        self.trg_attention = MultiheadAttention(d_model, 4, p_drop)
         self.norm1 = nn.LayerNorm(d_model)
-        self.encoder_attention = MultiheadAttention(d_model, 8, p_drop)
+        self.encoder_attention = MultiheadAttention(d_model, 4, p_drop)
         self.norm2 = nn.LayerNorm(d_model)
-        self.ffn = nn.Sequential(nn.Linear(d_model, 2048, bias=True),
+        self.ffn = nn.Sequential(nn.Linear(d_model, 1024, bias=True),
                                  nn.ReLU(),
-                                 nn.Linear(2048, d_model, bias=True))
+                                 nn.Linear(1024, d_model, bias=True))
         self.norm3 = nn.LayerNorm(d_model)
 
     def forward(self, tg, encoded_input, src_mask, trg_mask):
@@ -135,19 +135,21 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.tok_embedding = nn.Embedding(src_vocab_size, d_model)
         # print('encodeer_dmodel', d_model)
-        self.pos_embedding = PositionalEmbedding(d_model, device)
+        # self.pos_embedding = PositionalEmbedding(d_model, device)
+        self.pos_embedding = nn.Embedding(100, d_model)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
         self.encode_layers = nn.ModuleList(
             [EncoderLayer(d_model, p_drop) for _ in range(n_layers)])
         self.scale = torch.sqrt(torch.FloatTensor([d_model])).to(device)
-        
+        self.device = device
     def forward(self, x, src_mask):
         # x.shape: b, seq_len
         seq_len = x.shape[1]
-        # encoded_tok = self.tok_embedding(x) * (self.d_model ** (-0.5))
         encoded_tok = self.tok_embedding(x) * self.scale
-        encoded_pos = self.pos_embedding(x)
+        # encoded_pos = self.pos_embedding(x)
+        pos = torch.arange(0, x.shape[1]).unsqueeze(0).repeat(x.shape[0], 1).long().to(self.device)
+        encoded_pos = self.pos_embedding(pos)
         encoded_x = self.do(encoded_pos + encoded_tok)
         for layer in self.encode_layers:
             encoded_x = layer(encoded_x, src_mask)
@@ -159,7 +161,8 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.tok_embedding = nn.Embedding(trg_vocab_size, d_model)
         # print('decodeer_dmodel', d_model)
-        self.pos_embedding = PositionalEmbedding(d_model, device)
+        # self.pos_embedding = PositionalEmbedding(d_model, device)
+        self.pos_embedding = nn.Embedding(100, d_model)
         self.d_model = d_model
         self.do = nn.Dropout(p_drop)
         self.decode_layers = nn.ModuleList(
@@ -168,9 +171,11 @@ class Decoder(nn.Module):
         self.device = device
         self.scale = torch.sqrt(torch.FloatTensor([d_model])).to(device)
     def forward(self, x, y, src_mask, trg_mask):
-        encoded_pos = self.pos_embedding(y)
         encoded_tok = self.tok_embedding(y) * self.scale
-        # print(encoded_tok.shape, encoded_pos.shape)
+        # encoded_pos = self.pos_embedding(y)
+        pos = torch.arange(0, y.shape[1]).unsqueeze(0).repeat(y.shape[0], 1).long().to(self.device)
+        encoded_pos = self.pos_embedding(pos)
+        # assert encoded_tok.shape[1] == 50, 'shape mismatch {}'.format(encoded_tok.shape, y.shape)
         encoded_y = self.do(encoded_tok + encoded_pos)
         for layer in self.decode_layers:
             encoded_y = layer(encoded_y, x, src_mask, trg_mask)
