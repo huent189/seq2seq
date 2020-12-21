@@ -5,7 +5,7 @@ import os
 from model.transformers import Transformer
 from tqdm import tqdm
 from util import seed_all
-
+import numpy as np
 def translate_sentence(sentence, src_field, trg_field, model, device, max_len=50):
     if isinstance(sentence, str):
         toks = en_tokenize(sentence.lower())
@@ -16,6 +16,7 @@ def translate_sentence(sentence, src_field, trg_field, model, device, max_len=50
         print('input', [src_field.vocab.itos[s] for s in sentence])
         src_tensor = sentence.unsqueeze(0)
     trg = model.translate_sentence(src, src_field, trg_field, 50)
+    return trg
 
 def accuracy_score(pred, trg):
     pred = np.array(pred)
@@ -48,8 +49,7 @@ if __name__ == "__main__":
     print('en', len(en.vocab.stoi), 'vi', len(vi.vocab.stoi))
     print('Vocab has been built')
     print('Loading pretrain model...')
-    model = Transformer(max(len(en.vocab.stoi), len(
-        vi.vocab.stoi)), src_pad_idx, trg_pad_idx)
+    model = Transformer(max(len(en.vocab.stoi), len(vi.vocab.stoi)), src_pad_idx, trg_pad_idx, device='cuda', d_model=256, n_layers=5)
     model = model.to(device)
     model.load_state_dict(torch.load(config.pretrain_model))
     model.eval()
