@@ -1,16 +1,16 @@
 import torchtext
-from pyvi import ViTokenizer
+# from pyvi import ViTokenizer
 import os
 # import dill
 import torch
 from torchtext.data.utils import get_tokenizer
 import html
 import string
-# table = str.maketrans('', '', string.punctuation)
+table = str.maketrans(string.punctuation, ' ' * len(string.punctuation))
 def vi_tokenize(text):
     text = html.unescape(text)
-    # text = text.translate(table)
-    text = ViTokenizer.tokenize(text)
+    text = text.translate(table)
+#     text = ViTokenizer.tokenize(text)
     text = text.split()
     # print(text)
     return text
@@ -18,12 +18,12 @@ def vi_tokenize(text):
 def en_tokenize(text):
     # text = html.unescape(text)
     # return get_tokenizer('spacy')(text)
-    # text = text.translate(table)
+    text = text.translate(table)
     text = text.split()
     # print(text)
     return text
 
-def get_dataloader(root_path, train_file="train_200k_r.csv", test_file="val_200k_r.csv", batch_size=8, device='cuda', save_path=None, reload=None):
+def get_dataloader(root_path, train_file="train.csv", test_file="valid.csv", batch_size=8, device='cuda', save_path=None, reload=None):
     VI = torchtext.data.Field(tokenize=vi_tokenize,
                               init_token='<sos>',
                               eos_token='<eos>',
@@ -36,7 +36,7 @@ def get_dataloader(root_path, train_file="train_200k_r.csv", test_file="val_200k
                               lower=True,
                               fix_length=50,
                               batch_first=True)
-    data_fields = [('vi_no_accents', EN), ('vi', VI)]
+    data_fields = [('vi', VI),('vi_no_accents', EN)]
     train_data, val_data = torchtext.data.TabularDataset.splits(path=root_path, train=train_file, validation=test_file, format='csv', fields=data_fields, skip_header=True)
     train_iter, val_iter = torchtext.data.BucketIterator.splits(
         # we pass in the datasets we want the iterator to draw data from

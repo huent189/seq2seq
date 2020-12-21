@@ -6,7 +6,7 @@ from model.transformers import Transformer
 from tqdm import tqdm
 from util import seed_all
 
-def translate_sentence(sentence, src_field, trg_field, model, device, max_len=200):
+def translate_sentence(sentence, src_field, trg_field, model, device, max_len=50):
     if isinstance(sentence, str):
         toks = en_tokenize(sentence.lower())
         toks = [src_field.init_token] + toks + [src_field.eos_token]
@@ -15,32 +15,12 @@ def translate_sentence(sentence, src_field, trg_field, model, device, max_len=20
     else: 
         print('input', [src_field.vocab.itos[s] for s in sentence])
         src_tensor = sentence.unsqueeze(0)
-    src_pad_idx = src_field.vocab.stoi[src_field.pad_token]
-    src_mask = (src_tensor != src_pad_idx).unsqueeze(1).unsqueeze(2)
-    trg_input = [trg_field.vocab.stoi[trg_field.init_token]] * max_len
-    trg_input = torch.LongTensor(trg_input).unsqueeze(0).to(device)
-    model.eval()
-    last_idx = -1
-    for i in range(1, max_len, 1):
-        with torch.no_grad():
-            prediction = model(src_tensor, trg_input)
-            pred_token = prediction.argmax(2)[:, i-1].item()
-            # print(trg_field.vocab.itos[pred_token])
-            trg_input[0][i] = pred_token
-            
-            if pred_token == trg_field.vocab.stoi[trg_field.eos_token]:
-                # trg_input[0] = trg_input[0][:i]
-                last_idx = i
-                break
-    if last_idx == -1:
-        pred = trg_input[0]
-    else:
-        pred = trg_input[0][:last_idx]
-    trg_tokens = [trg_field.vocab.itos[i] for i in pred]
-    print(trg_tokens)
-    return trg_tokens[1:]
+    trg = model.translate_sentence(src, src_field, trg_field, 50)
 
-
+def accuracy_score(pred, trg):
+    pred = np.array(pred)
+    trg = np.array(trg)
+    return (pred == trg).sum() / pred.shape[0]
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default="data")
@@ -50,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--manual_train', action='store_true')
     parser.add_argument('--batch_size', type=int, default=8)
     config = parser.parse_args()
-    seed_all(2345)
+    seed_all(18921)
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu_id
     if config.manual_train:
         print('----------MANUAL MODE--------------')
@@ -62,9 +42,10 @@ if __name__ == "__main__":
         device = 'cpu'
     print('Building vocab....')
     train_data, test_data, en, vi = get_dataloader(
-        config.data_dir, batch_size=config.batch_size, device=device, test_file="test.csv")
+        config.data_dir, batch_size=config.batch_size, device=device, test_file="test_250k.csv")
     src_pad_idx = en.vocab.stoi[en.pad_token]
     trg_pad_idx = vi.vocab.stoi[vi.pad_token]
+    print('en', len(en.vocab.stoi), 'vi', len(vi.vocab.stoi))
     print('Vocab has been built')
     print('Loading pretrain model...')
     model = Transformer(max(len(en.vocab.stoi), len(
@@ -81,6 +62,8 @@ if __name__ == "__main__":
             print('predict output:', "".join(pred))
     else:
         with open(os.path.join(config.log_dir, 'output.txt'), 'w') as f:
+            num_sample = 0
+            acc = 0
             for i, batch in tqdm(enumerate(train_data)):
                 src = batch.en
                 trg = batch.vi
@@ -92,7 +75,10 @@ if __name__ == "__main__":
                     pred = translate_sentence(en_sentence, en, vi, model, device)
                     print('predict output:', "".join(pred))
                     f.write("".join(pred) + "\n")
+                    acc += accuracy_score(pred, trg)
+                    num_sample += 1
                     break
+                print('Accuracy: ', acc / num_sample)
                 # output = model(src, trg)
                 # print()
                 # pred_token = output[0].argmax(1)
